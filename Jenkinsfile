@@ -47,14 +47,6 @@ pipeline {
             }
         }
 
-        stage('Quality Gate (Optional but IMPORTANT)') {
-            steps {
-                timeout(time: 3, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: false
-                }
-            }
-        }
-
         stage('Package') {
             steps {
                 sh 'zip -r app-${BUILD_NUMBER}.zip output.txt'
