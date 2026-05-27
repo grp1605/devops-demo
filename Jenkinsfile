@@ -2,11 +2,14 @@ pipeline {
     agent any
 
     environment {
-        SONAR_HOST = 'http://172.17.0.1:9000'
-        SONAR_PROJECT = 'demo-vscode'
 
+        // SonarQube
+        SONAR_HOST_URL = 'http://172.17.0.1:9000'
+        SONAR_PROJECT_KEY = 'demo-vscode'
+
+        // Nexus
         NEXUS_URL = 'http://172.17.0.1:8081'
-        NEXUS_REPO = 'raw-repo'
+        NEXUS_REPO = 'maven-releases'
         NEXUS_USER = 'admin'
         NEXUS_PASS = 'your_password'
     }
@@ -16,30 +19,45 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo 'Code pulled from GitHub'
+                checkout scm
             }
         }
 
         stage('Build') {
             steps {
-                echo 'Preparing artifact'
+                echo 'Creating build file'
                 sh 'echo "Hello DevOps Pipeline" > output.txt'
             }
         }
 
-        stage('SonarQube') {
+        stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('sonarqube') {
-                    sh '''
-                        echo "Simulating SonarQube scan"
-                        sleep 2
-                    '''
+                    script {
+                        def scannerHome = tool 'sonar-scanner'
+
+                        sh """
+                            ${scannerHome}/bin/sonar-scanner \
+                            -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                            -Dsonar.sources=. \
+                            -Dsonar.host.url=${SONAR_HOST_URL}
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Quality Gate (Optional but IMPORTANT)') {
+            steps {
+                timeout(time: 1, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: false
                 }
             }
         }
 
         stage('Package') {
             steps {
-                sh 'zip -r app.zip output.txt'
+                sh 'zip -r app-${BUILD_NUMBER}.zip output.txt'
             }
         }
 
@@ -47,7 +65,7 @@ pipeline {
             steps {
                 sh """
                     curl -u ${NEXUS_USER}:${NEXUS_PASS} \
-                    --upload-file app.zip \
+                    --upload-file app-${BUILD_NUMBER}.zip \
                     ${NEXUS_URL}/repository/${NEXUS_REPO}/app-${BUILD_NUMBER}.zip
                 """
             }
@@ -55,7 +73,7 @@ pipeline {
 
         stage('Finish') {
             steps {
-                echo 'Pipeline completed successfully'
+                echo "Pipeline Completed Successfully"
             }
         }
     }
